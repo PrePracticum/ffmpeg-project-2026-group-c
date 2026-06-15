@@ -18,9 +18,9 @@ namespace FFmpeg.Infrastructure.Commands
         public async Task<CommandResult> ExecuteAsync(ReverseVideoModel model)
         {
             CommandBuilder
-                .SetInput(model.InputFile)    // זה מחליף את ה- "ffmpeg -i input.mp4" ומביא את הקובץ האמיתי
-                .AddOption("-vf reverse")     // זה הלב של הפקודה מהמשימה שלך!
-                .SetOutput(model.OutputFile);  // זה מחליף את ה- "output.mp4" ומייצר את הקובץ הסופי
+                .SetInput(model.InputFile)   
+                .AddOption("-vf reverse")    
+                .SetOutput(model.OutputFile);  
 
             return await RunAsync();
         }
