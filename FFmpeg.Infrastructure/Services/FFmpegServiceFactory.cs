@@ -14,6 +14,7 @@ namespace FFmpeg.Infrastructure.Services
     public interface IFFmpegServiceFactory
     {
         ICommand<WatermarkModel> CreateWatermarkCommand();
+        ICommand<ReverseVideoModel> CreateReverseVideoCommand();
     }
 
     public class FFmpegServiceFactory : IFFmpegServiceFactory
@@ -21,6 +22,10 @@ namespace FFmpeg.Infrastructure.Services
         private readonly FFmpegExecutor _executor;
         private readonly ICommandBuilder _commandBuilder;
 
+        public ICommand<ReverseVideoModel> CreateReverseVideoCommand()
+        {
+            return new ReverseVideoCommand(_executor, _commandBuilder);
+        }
         public FFmpegServiceFactory(IConfiguration configuration, ILogger logger = null)
         {
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
