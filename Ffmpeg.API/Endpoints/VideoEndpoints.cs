@@ -24,6 +24,10 @@ namespace FFmpeg.API.Endpoints
             app.MapPost("/api/video/reverse", ReverseVideo)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(104857600)); // הגבלת גודל ל-100 MB
+
+            app.MapPost("/api/video/extract-frame", ExtractFrame)
+                .DisableAntiforgery()
+                .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
         }
 
         private static async Task<IResult> ReverseVideo(
@@ -154,6 +158,94 @@ namespace FFmpeg.API.Endpoints
                 return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
 
+        }
+
+        private static async Task<IResult> ExtractFrame(
+            HttpContext context,
+            [FromForm] ExtractFrameDto dto)
+        {
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                // Validate request
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                if (string.IsNullOrEmpty(dto.TimeStamp))
+                {
+                    return Results.BadRequest("TimeStamp is required (format: HH:MM:SS).");
+                }
+
+                if (string.IsNullOrEmpty(dto.OutputImageName))
+                {
+                    return Results.BadRequest("OutputImageName is required.");
+                }
+
+                // Save uploaded video file
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                // Determine image extension from OutputImageName or use .png as default
+                string imageExtension = Path.GetExtension(dto.OutputImageName);
+                if (string.IsNullOrEmpty(imageExtension))
+                {
+                    imageExtension = ".png";
+                }
+
+                // Generate output filename for the image
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(imageExtension);
+                filesToCleanup.Add(outputFileName);
+
+                // Create and execute the extract frame command
+                var command = ffmpegService.CreateExtractFrameCommand();
+                var result = await command.ExecuteAsync(new ExtractFrameModel
+                {
+                    InputFile = inputFileName,
+                    TimeStamp = dto.TimeStamp,
+                    OutputFile = outputFileName
+                });
+
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg extract frame command failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to extract frame: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                // Read the output image file
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                // Clean up temporary files
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                // Determine MIME type based on extension
+                string mimeType = imageExtension.ToLower() switch
+                {
+                    ".png" => "image/png",
+                    ".jpg" => "image/jpeg",
+                    ".jpeg" => "image/jpeg",
+                    ".bmp" => "image/bmp",
+                    _ => "image/png"
+                };
+
+                // Return the image file
+                return Results.File(fileBytes, mimeType, Path.GetFileName(dto.OutputImageName));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in ExtractFrame endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+            }
         }
     }
 }
