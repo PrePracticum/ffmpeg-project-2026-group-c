@@ -29,6 +29,10 @@ namespace FFmpeg.API.Endpoints
       .DisableAntiforgery()
       .WithMetadata(new RequestSizeLimitAttribute(104857600));
 
+
+            app.MapPost("/api/video/brightness-contrast", ApplyBrightnessContrast)
+                .DisableAntiforgery()
+                .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
         }
 
         private static async Task<IResult> ReverseVideo(
@@ -83,6 +87,75 @@ namespace FFmpeg.API.Endpoints
             catch (Exception ex)
             {
                 logger.LogError(ex, "Error in ReverseVideo endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+            }
+        }
+
+        private static async Task<IResult> ApplyBrightnessContrast(
+            HttpContext context,
+            [FromForm] BrightnessContrastDto dto)
+        {
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                string outputExtension = Path.GetExtension(dto.OutputFileName);
+                if (string.IsNullOrWhiteSpace(outputExtension))
+                {
+                    outputExtension = ".mp4";
+                }
+
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(outputExtension);
+                filesToCleanup.Add(outputFileName);
+
+                string fullInputPath = fileService.GetFullInputPath(inputFileName);
+                string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
+
+                var command = ffmpegService.CreateBrightnessContrastCommand();
+
+                var result = await command.ExecuteAsync(new BrightnessContrastModel
+                {
+                    InputFile = fullInputPath,
+                    OutputFile = fullOutputPath,
+                    Brightness = dto.Brightness,
+                    Contrast = dto.Contrast
+                });
+
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg brightness/contrast command failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to adjust brightness/contrast: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                string downloadFileName = string.IsNullOrWhiteSpace(dto.OutputFileName)
+                    ? dto.VideoFile.FileName
+                    : dto.OutputFileName;
+
+                return Results.File(fileBytes, "video/mp4", downloadFileName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in ApplyBrightnessContrast endpoint");
                 _ = fileService.CleanupTempFilesAsync(filesToCleanup);
                 return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
