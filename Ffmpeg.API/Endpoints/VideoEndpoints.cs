@@ -25,12 +25,16 @@ namespace FFmpeg.API.Endpoints
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(104857600)); // הגבלת גודל ל-100 MB
 
+<<<<<<< HEAD
+            app.MapPost("/api/video/extract-frame", ExtractFrame)
+=======
             app.MapPost("/api/video/extract-audio", ExtractAudio)
       .DisableAntiforgery()
       .WithMetadata(new RequestSizeLimitAttribute(104857600));
 
 
             app.MapPost("/api/video/brightness-contrast", ApplyBrightnessContrast)
+>>>>>>> main
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
         }
@@ -234,9 +238,16 @@ namespace FFmpeg.API.Endpoints
 
         }
 
+<<<<<<< HEAD
+        private static async Task<IResult> ExtractFrame(
+            HttpContext context,
+            [FromForm] ExtractFrameDto dto)
+        {
+=======
         private static async Task<IResult> ExtractAudio(HttpContext context, [FromForm] ExtractAudioDto dto)
         {
             // סידור משתנים בראש הפונקציה למניעת שגיאת CS0841
+>>>>>>> main
             var fileService = context.RequestServices.GetRequiredService<IFileService>();
             var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
             var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
@@ -245,6 +256,46 @@ namespace FFmpeg.API.Endpoints
 
             try
             {
+<<<<<<< HEAD
+                // Validate request
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                if (string.IsNullOrEmpty(dto.TimeStamp))
+                {
+                    return Results.BadRequest("TimeStamp is required (format: HH:MM:SS).");
+                }
+
+                if (string.IsNullOrEmpty(dto.OutputImageName))
+                {
+                    return Results.BadRequest("OutputImageName is required.");
+                }
+
+                // Save uploaded video file
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                // Determine image extension from OutputImageName or use .png as default
+                string imageExtension = Path.GetExtension(dto.OutputImageName);
+                if (string.IsNullOrEmpty(imageExtension))
+                {
+                    imageExtension = ".png";
+                }
+
+                // Generate output filename for the image
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(imageExtension);
+                filesToCleanup.Add(outputFileName);
+
+                // Create and execute the extract frame command
+                var command = ffmpegService.CreateExtractFrameCommand();
+                var result = await command.ExecuteAsync(new ExtractFrameModel
+                {
+                    InputFile = inputFileName,
+                    TimeStamp = dto.TimeStamp,
+                    OutputFile = outputFileName
+=======
                 if (dto.VideoFile == null || dto.VideoFile.Length == 0)
                     return Results.BadRequest("Video file is required.");
 
@@ -259,10 +310,44 @@ namespace FFmpeg.API.Endpoints
                 {
                     InputFile = fileService.GetFullInputPath(inputFileName),
                     OutputFile = fileService.GetFullOutputPath(outputFileName)
+>>>>>>> main
                 });
 
                 if (!result.IsSuccess)
                 {
+<<<<<<< HEAD
+                    logger.LogError("FFmpeg extract frame command failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to extract frame: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                // Read the output image file
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                // Clean up temporary files
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                // Determine MIME type based on extension
+                string mimeType = imageExtension.ToLower() switch
+                {
+                    ".png" => "image/png",
+                    ".jpg" => "image/jpeg",
+                    ".jpeg" => "image/jpeg",
+                    ".bmp" => "image/bmp",
+                    _ => "image/png"
+                };
+
+                // Return the image file
+                return Results.File(fileBytes, mimeType, Path.GetFileName(dto.OutputImageName));
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in ExtractFrame endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+=======
                     logger.LogError("FFmpeg extract audio failed: {Error}", result.ErrorMessage);
                     _ = fileService.CleanupTempFilesAsync(filesToCleanup);
                     return Results.Problem("Failed to extract audio: " + result.ErrorMessage);
@@ -277,6 +362,7 @@ namespace FFmpeg.API.Endpoints
             {
                 logger.LogError(ex, "Error in ExtractAudio");
                 return Results.Problem("An error occurred: " + ex.Message);
+>>>>>>> main
             }
         }
     }
