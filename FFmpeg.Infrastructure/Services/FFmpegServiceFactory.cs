@@ -15,6 +15,7 @@ namespace FFmpeg.Infrastructure.Services
     {
         ICommand<WatermarkModel> CreateWatermarkCommand();
         ICommand<ReverseVideoModel> CreateReverseVideoCommand();
+        ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand();
     }
 
     public class FFmpegServiceFactory : IFFmpegServiceFactory
@@ -26,6 +27,12 @@ namespace FFmpeg.Infrastructure.Services
         {
             return new ReverseVideoCommand(_executor, _commandBuilder);
         }
+
+        public ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand()
+        {
+            return new BrightnessContrastCommand(_executor, _commandBuilder);
+        }
+
         public FFmpegServiceFactory(IConfiguration configuration, ILogger logger = null)
         {
             string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
