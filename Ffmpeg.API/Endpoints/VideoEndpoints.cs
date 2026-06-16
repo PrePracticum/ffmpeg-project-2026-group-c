@@ -24,6 +24,11 @@ namespace FFmpeg.API.Endpoints
             app.MapPost("/api/video/reverse", ReverseVideo)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(104857600)); // הגבלת גודל ל-100 MB
+
+            app.MapPost("/api/video/extract-audio", ExtractAudio)
+      .DisableAntiforgery()
+      .WithMetadata(new RequestSizeLimitAttribute(104857600));
+
         }
 
         private static async Task<IResult> ReverseVideo(
@@ -154,6 +159,52 @@ namespace FFmpeg.API.Endpoints
                 return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
 
+        }
+
+        private static async Task<IResult> ExtractAudio(HttpContext context, [FromForm] ExtractAudioDto dto)
+        {
+            // סידור משתנים בראש הפונקציה למניעת שגיאת CS0841
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                    return Results.BadRequest("Video file is required.");
+
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(".mp3");
+                filesToCleanup.Add(outputFileName);
+
+                var command = ffmpegService.CreateExtractAudioCommand();
+                var result = await command.ExecuteAsync(new ExtractAudioModel
+                {
+                    InputFile = fileService.GetFullInputPath(inputFileName),
+                    OutputFile = fileService.GetFullOutputPath(outputFileName)
+                });
+
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg extract audio failed: {Error}", result.ErrorMessage);
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to extract audio: " + result.ErrorMessage);
+                }
+
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                return Results.File(fileBytes, "audio/mpeg", "audio.mp3");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in ExtractAudio");
+                return Results.Problem("An error occurred: " + ex.Message);
+            }
         }
     }
 }
