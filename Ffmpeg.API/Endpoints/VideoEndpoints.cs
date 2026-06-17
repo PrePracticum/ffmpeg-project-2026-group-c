@@ -33,6 +33,10 @@ namespace FFmpeg.API.Endpoints
             app.MapPost("/api/video/brightness-contrast", ApplyBrightnessContrast)
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
+
+            app.MapPost("/api/video/convert", ConvertFormat)
+             .DisableAntiforgery()
+                     .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
         }
 
         private static async Task<IResult> ReverseVideo(
@@ -277,6 +281,82 @@ namespace FFmpeg.API.Endpoints
             {
                 logger.LogError(ex, "Error in ExtractAudio");
                 return Results.Problem("An error occurred: " + ex.Message);
+            }
+        }
+        private static async Task<IResult> ConvertFormat(
+        HttpContext context,
+        [FromForm] FormatConversionDto dto)
+        {
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                // 1. וולידציה בסיסית
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.TargetExtension))
+                {
+                    return Results.BadRequest("Target extension (e.g. '.avi') is required.");
+                }
+
+                // וידוא שהסיומת מתחילה בנקודה
+                string targetExt = dto.TargetExtension.StartsWith(".") ? dto.TargetExtension : "." + dto.TargetExtension;
+
+                // 2. שמירת קובץ הקלט
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                // 3. יצירת שם ייחודי לקובץ הפלט עם הסיומת החדשה
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(targetExt);
+                filesToCleanup.Add(outputFileName);
+
+                // 4. קבלת נתיבים מלאים
+                string fullInputPath = fileService.GetFullInputPath(inputFileName);
+                string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
+
+                // 5. יצירת ה-Command והרצתו
+                var command = ffmpegService.CreateFormatConversionCommand();
+
+                var result = await command.ExecuteAsync(new FormatConversionModel
+                {
+                    InputFile = fullInputPath,
+                    OutputFile = fullOutputPath
+                });
+
+                // 6. בדיקת הצלחת הפקודה
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg format conversion failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to convert video format: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                // 7. קריאת קובץ התוצאה והחזרתו למשתמש
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                // ניקוי קבצים זמניים
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                // יצירת שם להורדה (השם המקורי של הקובץ עם הסיומת החדשה)
+                string downloadFileName = Path.GetFileNameWithoutExtension(dto.VideoFile.FileName) + targetExt;
+
+                // החזרת הקובץ (תוכל לשנות את ה-MimeType לפי הצורך, או להשתמש ב-"application/octet-stream" לכללי)
+                return Results.File(fileBytes, "application/octet-stream", downloadFileName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in ConvertFormat endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
         }
     }
