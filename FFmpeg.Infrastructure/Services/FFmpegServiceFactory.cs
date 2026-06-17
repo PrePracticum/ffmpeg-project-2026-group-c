@@ -17,6 +17,7 @@ namespace FFmpeg.Infrastructure.Services
         ICommand<ReverseVideoModel> CreateReverseVideoCommand();
         ICommand<ExtractAudioModel> CreateExtractAudioCommand();
         ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand();
+        ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand();
     }
 
     public class FFmpegServiceFactory : IFFmpegServiceFactory
@@ -32,6 +33,11 @@ namespace FFmpeg.Infrastructure.Services
         public ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand()
         {
             return new BrightnessContrastCommand(_executor, _commandBuilder);
+        }
+
+        public ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand()
+        {
+            return new ChangeVideoSpeedCommand(_executor, _commandBuilder);
         }
 
         public FFmpegServiceFactory(IConfiguration configuration, ILogger logger = null)
