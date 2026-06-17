@@ -100,6 +100,10 @@ namespace FFmpeg.API.Endpoints
                 _ = fileService.CleanupTempFilesAsync(filesToCleanup);
                 return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
+
+            app.MapPost("/api/video/audio-echo", AudioEcho)
+                .DisableAntiforgery()
+                .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
         }
 
         private static async Task<IResult> ReverseVideo(
@@ -299,6 +303,79 @@ namespace FFmpeg.API.Endpoints
                 return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
 
+        }
+
+        private static async Task<IResult> AudioEcho(
+            HttpContext context,
+            [FromForm] AudioEchoDto dto)
+        {
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                if (dto.Duration <= 0)
+                {
+                    return Results.BadRequest("Duration must be greater than 0.");
+                }
+
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                string outputExtension = Path.GetExtension(dto.OutputFileName);
+                if (string.IsNullOrWhiteSpace(outputExtension))
+                {
+                    outputExtension = ".mp4";
+                }
+
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(outputExtension);
+                filesToCleanup.Add(outputFileName);
+
+                string fullInputPath = fileService.GetFullInputPath(inputFileName);
+                string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
+
+                var command = ffmpegService.CreateAudioEchoCommand();
+
+                var result = await command.ExecuteAsync(new AudioEchoModel
+                {
+                    InputFile = fullInputPath,
+                    OutputFile = fullOutputPath,
+                    Duration = dto.Duration
+                });
+
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg audio echo command failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to apply audio echo: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                string downloadFileName = string.IsNullOrWhiteSpace(dto.OutputFileName)
+                    ? dto.VideoFile.FileName
+                    : dto.OutputFileName;
+
+                return Results.File(fileBytes, "video/mp4", downloadFileName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in AudioEcho endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+            }
         }
 
         private static async Task<IResult> ExtractAudio(HttpContext context, [FromForm] ExtractAudioDto dto)
