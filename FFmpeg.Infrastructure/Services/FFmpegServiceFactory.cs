@@ -17,6 +17,7 @@ namespace FFmpeg.Infrastructure.Services
         ICommand<ReverseVideoModel> CreateReverseVideoCommand();
         ICommand<ExtractAudioModel> CreateExtractAudioCommand();
         ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand();
+        ICommand<AudioEchoModel> CreateAudioEchoCommand();
     }
 
     public class FFmpegServiceFactory : IFFmpegServiceFactory
@@ -52,6 +53,11 @@ namespace FFmpeg.Infrastructure.Services
         public ICommand<ExtractAudioModel> CreateExtractAudioCommand()
         {
             return new ExtractAudioCommand(_executor, _commandBuilder);
+        }
+
+        public ICommand<AudioEchoModel> CreateAudioEchoCommand()
+        {
+            return new AudioEchoCommand(_executor, _commandBuilder);
         }
     }
 }
