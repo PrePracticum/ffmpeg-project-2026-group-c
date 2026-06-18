@@ -22,7 +22,6 @@ namespace Ffmpeg.Command.Commands
             CommandBuilder = _commandBuilder
                 .SetInput(model.InputFile);
 
-            // הגדרת קובץ הפלט. הפרמטר השני קובע האם זה אאודיו בלבד (false אומר שזה וידאו)
             CommandBuilder.SetOutput(model.OutputFile, false);
 
             return await RunAsync();

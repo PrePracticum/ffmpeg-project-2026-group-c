@@ -295,7 +295,6 @@ namespace FFmpeg.API.Endpoints
 
             try
             {
-                // 1. וולידציה בסיסית
                 if (dto.VideoFile == null || dto.VideoFile.Length == 0)
                 {
                     return Results.BadRequest("Video file is required.");
@@ -306,22 +305,18 @@ namespace FFmpeg.API.Endpoints
                     return Results.BadRequest("Target extension (e.g. '.avi') is required.");
                 }
 
-                // וידוא שהסיומת מתחילה בנקודה
+      
                 string targetExt = dto.TargetExtension.StartsWith(".") ? dto.TargetExtension : "." + dto.TargetExtension;
 
-                // 2. שמירת קובץ הקלט
                 string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
                 filesToCleanup.Add(inputFileName);
 
-                // 3. יצירת שם ייחודי לקובץ הפלט עם הסיומת החדשה
                 string outputFileName = await fileService.GenerateUniqueFileNameAsync(targetExt);
                 filesToCleanup.Add(outputFileName);
 
-                // 4. קבלת נתיבים מלאים
                 string fullInputPath = fileService.GetFullInputPath(inputFileName);
                 string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
 
-                // 5. יצירת ה-Command והרצתו
                 var command = ffmpegService.CreateFormatConversionCommand();
 
                 var result = await command.ExecuteAsync(new FormatConversionModel
@@ -330,7 +325,6 @@ namespace FFmpeg.API.Endpoints
                     OutputFile = fullOutputPath
                 });
 
-                // 6. בדיקת הצלחת הפקודה
                 if (!result.IsSuccess)
                 {
                     logger.LogError("FFmpeg format conversion failed: {ErrorMessage}, Command: {Command}",
@@ -340,16 +334,12 @@ namespace FFmpeg.API.Endpoints
                     return Results.Problem("Failed to convert video format: " + result.ErrorMessage, statusCode: 500);
                 }
 
-                // 7. קריאת קובץ התוצאה והחזרתו למשתמש
                 byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
 
-                // ניקוי קבצים זמניים
                 _ = fileService.CleanupTempFilesAsync(filesToCleanup);
 
-                // יצירת שם להורדה (השם המקורי של הקובץ עם הסיומת החדשה)
                 string downloadFileName = Path.GetFileNameWithoutExtension(dto.VideoFile.FileName) + targetExt;
 
-                // החזרת הקובץ (תוכל לשנות את ה-MimeType לפי הצורך, או להשתמש ב-"application/octet-stream" לכללי)
                 return Results.File(fileBytes, "application/octet-stream", downloadFileName);
             }
             catch (Exception ex)
