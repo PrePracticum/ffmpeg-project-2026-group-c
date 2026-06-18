@@ -34,12 +34,80 @@ namespace FFmpeg.API.Endpoints
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
 
+            app.MapPost("/api/video/change-speed", ChangeVideoSpeed)
+                .DisableAntiforgery()
+                .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
+
             app.MapPost("/api/video/convert", ConvertFormat)
              .DisableAntiforgery()
                      .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
             app.MapPost("/api/video/audio-echo", AudioEcho)
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
+
+        }
+
+        private static async Task<IResult> ChangeVideoSpeed(
+            HttpContext context,
+            [FromForm] ChangeVideoSpeedDto dto)
+        {
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                if (dto.Speed <= 0)
+                {
+                    return Results.BadRequest("Speed must be greater than 0.");
+                }
+
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                string outputFileName = await fileService.GenerateUniqueFileNameAsync(".mp4");
+                filesToCleanup.Add(outputFileName);
+
+                string fullInputPath = fileService.GetFullInputPath(inputFileName);
+                string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
+
+                var command = ffmpegService.CreateChangeVideoSpeedCommand();
+
+                var result = await command.ExecuteAsync(new ChangeVideoSpeedModel
+                {
+                    InputFile = fullInputPath,
+                    OutputFile = fullOutputPath,
+                    Speed = dto.Speed
+                });
+
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg change speed command failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to change video speed: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                return Results.File(fileBytes, "video/mp4", dto.VideoFile.FileName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in ChangeVideoSpeed endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+            }
         }
 
         private static async Task<IResult> ReverseVideo(
