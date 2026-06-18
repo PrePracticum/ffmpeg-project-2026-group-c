@@ -18,6 +18,7 @@ namespace FFmpeg.Infrastructure.Services
         ICommand<ExtractAudioModel> CreateExtractAudioCommand();
         ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand();
         ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand();
+        ICommand<FormatConversionModel> CreateFormatConversionCommand();
         ICommand<AudioEchoModel> CreateAudioEchoCommand();
     }
 
@@ -60,7 +61,10 @@ namespace FFmpeg.Infrastructure.Services
         {
             return new ExtractAudioCommand(_executor, _commandBuilder);
         }
-
+        public ICommand<FormatConversionModel> CreateFormatConversionCommand()
+        {
+            return new FormatConversionCommand(_executor, _commandBuilder);
+        }
         public ICommand<AudioEchoModel> CreateAudioEchoCommand()
         {
             return new AudioEchoCommand(_executor, _commandBuilder);
