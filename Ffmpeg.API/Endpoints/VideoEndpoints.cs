@@ -45,6 +45,10 @@ namespace FFmpeg.API.Endpoints
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
 
+            app.MapPost("/api/video/create-gif", CreateGif)
+               .DisableAntiforgery()
+               .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
+
         }
 
         private static async Task<IResult> ChangeVideoSpeed(
@@ -493,5 +497,66 @@ namespace FFmpeg.API.Endpoints
                 return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
             }
         }
+
+
+        private static async Task<IResult> CreateGif(
+            HttpContext context,
+            [FromForm] CreateGifDto dto)
+                {
+                    var fileService = context.RequestServices.GetRequiredService<IFileService>();
+                    var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+                    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+                    var filesToCleanup = new List<string>();
+
+                    try
+                    {
+                        if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                        {
+                            return Results.BadRequest("Video file is required.");
+                        }
+
+                        // שמירת הקובץ שהועלה
+                        string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                        filesToCleanup.Add(inputFileName);
+
+                        // יצירת שם קובץ פלט מסוג gif
+                        string outputFileName = await fileService.GenerateUniqueFileNameAsync(".gif");
+                        filesToCleanup.Add(outputFileName);
+
+                        string fullInputPath = fileService.GetFullInputPath(inputFileName);
+                        string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
+
+                        // קריאה ל-Factory שיצרת בשלב הקודם
+                        var command = ffmpegService.CreateCreateGifCommand();
+
+                        var result = await command.ExecuteAsync(new CreateGifModel
+                        {
+                            InputFile = fullInputPath,
+                            OutputFile = fullOutputPath
+                        });
+
+                        if (!result.IsSuccess)
+                        {
+                            logger.LogError("FFmpeg create gif command failed: {ErrorMessage}, Command: {Command}",
+                                result.ErrorMessage, result.CommandExecuted);
+
+                            _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                            return Results.Problem("Failed to create GIF: " + result.ErrorMessage, statusCode: 500);
+                        }
+
+                        // החזרת הקובץ למשתמש
+                        byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+                        _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                        return Results.File(fileBytes, "image/gif", "output.gif");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error in CreateGif endpoint");
+                        _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                        return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+                    }
+                }
     }
 }
