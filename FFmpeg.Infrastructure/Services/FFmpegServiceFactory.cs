@@ -20,6 +20,7 @@ namespace FFmpeg.Infrastructure.Services
         ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand();
         ICommand<FormatConversionModel> CreateFormatConversionCommand();
         ICommand<AudioEchoModel> CreateAudioEchoCommand();
+        ICommand<CreateGifModel> CreateCreateGifCommand();
     }
 
     public class FFmpegServiceFactory : IFFmpegServiceFactory
@@ -68,6 +69,11 @@ namespace FFmpeg.Infrastructure.Services
         public ICommand<AudioEchoModel> CreateAudioEchoCommand()
         {
             return new AudioEchoCommand(_executor, _commandBuilder);
+        }
+
+        public ICommand<CreateGifModel> CreateCreateGifCommand()
+        {
+            return new CreateGifCommand(_executor, _commandBuilder);
         }
     }
 }
