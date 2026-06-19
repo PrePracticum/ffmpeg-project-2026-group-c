@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.IO;
 
 namespace FFmpeg.Infrastructure.Services
 {
@@ -20,6 +21,7 @@ namespace FFmpeg.Infrastructure.Services
         ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand();
         ICommand<FormatConversionModel> CreateFormatConversionCommand();
         ICommand<AudioEchoModel> CreateAudioEchoCommand();
+        ICommand<AudioRemovalModel> CreateAudioRemovalCommand(); 
     }
 
     public class FFmpegServiceFactory : IFFmpegServiceFactory
@@ -40,6 +42,11 @@ namespace FFmpeg.Infrastructure.Services
         public ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand()
         {
             return new ChangeVideoSpeedCommand(_executor, _commandBuilder);
+        }
+
+        public ICommand<AudioRemovalModel> CreateAudioRemovalCommand()
+        {
+            return new AudioRemovalCommand(_executor, _commandBuilder);
         }
 
         public FFmpegServiceFactory(IConfiguration configuration, ILogger logger = null)
