@@ -21,6 +21,10 @@ namespace FFmpeg.API.Endpoints
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
 
+            app.MapPost("/api/video/text-overlay", AddTextOverlay)
+                .DisableAntiforgery()
+                .WithMetadata(new RequestSizeLimitAttribute(104857600)); // 100 MB
+
             app.MapPost("/api/video/reverse", ReverseVideo)
             .DisableAntiforgery()
             .WithMetadata(new RequestSizeLimitAttribute(104857600)); // הגבלת גודל ל-100 MB
@@ -47,6 +51,95 @@ namespace FFmpeg.API.Endpoints
 
         }
 
+        private static async Task<IResult> AddTextOverlay(
+            HttpContext context,
+            [FromForm] TextOverlayDto dto)
+        {
+            var fileService = context.RequestServices.GetRequiredService<IFileService>();
+            var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+
+            var filesToCleanup = new List<string>();
+
+            try
+            {
+                if (dto.VideoFile == null || dto.VideoFile.Length == 0)
+                {
+                    return Results.BadRequest("Video file is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.Text))
+                {
+                    return Results.BadRequest("Text content is required.");
+
+                }
+
+                string inputFileName = await fileService.SaveUploadedFileAsync(dto.VideoFile);
+                filesToCleanup.Add(inputFileName);
+
+                string outputFileName;
+                if (string.IsNullOrWhiteSpace(dto.OutputFileName))
+                {
+                    // Keep original filename when not provided
+                    outputFileName = Path.GetFileName(dto.VideoFile.FileName);
+                }
+                else
+                {
+                    // Use provided filename (just the name portion)
+                    outputFileName = Path.GetFileName(dto.OutputFileName);
+                    // ensure extension exists
+                    if (string.IsNullOrWhiteSpace(Path.GetExtension(outputFileName)))
+                    {
+                        outputFileName += ".mp4";
+                    }
+                }
+
+                filesToCleanup.Add(outputFileName);
+
+                string fullInputPath = fileService.GetFullInputPath(inputFileName);
+                string fullOutputPath = fileService.GetFullOutputPath(outputFileName);
+
+                var command = ffmpegService.CreateTextOverlayCommand();
+
+                var result = await command.ExecuteAsync(new TextOverlayModel
+                {
+                    InputFile = fullInputPath,
+                    OutputFile = fullOutputPath,
+                    Text = dto.Text,
+                    FontColor = dto.FontColor,
+                    FontSize = dto.FontSize,
+                    XPosition = dto.XPosition,
+                    YPosition = dto.YPosition,
+                    Animate = dto.Animate,
+                    Speed = dto.Speed
+                });
+
+                if (!result.IsSuccess)
+                {
+                    logger.LogError("FFmpeg text overlay command failed: {ErrorMessage}, Command: {Command}",
+                        result.ErrorMessage, result.CommandExecuted);
+
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    return Results.Problem("Failed to add text overlay: " + result.ErrorMessage, statusCode: 500);
+                }
+
+                byte[] fileBytes = await fileService.GetOutputFileAsync(outputFileName);
+
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                string downloadFileName = string.IsNullOrWhiteSpace(dto.OutputFileName)
+                    ? dto.VideoFile.FileName
+                    : dto.OutputFileName;
+
+                return Results.File(fileBytes, "video/mp4", downloadFileName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in AddTextOverlay endpoint");
+                _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                return Results.Problem("An error occurred: " + ex.Message, statusCode: 500);
+            }
+        }
         private static async Task<IResult> ChangeVideoSpeed(
             HttpContext context,
             [FromForm] ChangeVideoSpeedDto dto)
