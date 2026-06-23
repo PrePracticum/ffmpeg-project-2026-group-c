@@ -19,6 +19,7 @@ namespace FFmpeg.Infrastructure.Services
         ICommand<ExtractAudioModel> CreateExtractAudioCommand();
         ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand();
         ICommand<ChangeVideoSpeedModel> CreateChangeVideoSpeedCommand();
+        ICommand<TextOverlayModel> CreateTextOverlayCommand();
         ICommand<FormatConversionModel> CreateFormatConversionCommand();
         ICommand<AudioEchoModel> CreateAudioEchoCommand();
         ICommand<AudioRemovalModel> CreateAudioRemovalCommand(); 
@@ -45,6 +46,10 @@ namespace FFmpeg.Infrastructure.Services
             return new ChangeVideoSpeedCommand(_executor, _commandBuilder);
         }
 
+        public ICommand<TextOverlayModel> CreateTextOverlayCommand()
+        {
+            return new TextOverlayCommand(_executor, _commandBuilder);
+        }
         public ICommand<AudioRemovalModel> CreateAudioRemovalCommand()
         {
             return new AudioRemovalCommand(_executor, _commandBuilder);
