@@ -15,6 +15,7 @@ namespace FFmpeg.Infrastructure.Services
     public interface IFFmpegServiceFactory
     {
         ICommand<WatermarkModel> CreateWatermarkCommand();
+        ICommand<MergeVideosModel> CreateMergeCommand();
         ICommand<ReverseVideoModel> CreateReverseVideoCommand();
         ICommand<ExtractAudioModel> CreateExtractAudioCommand();
         ICommand<BrightnessContrastModel> CreateBrightnessContrastCommand();
@@ -70,6 +71,10 @@ namespace FFmpeg.Infrastructure.Services
         {
             return new WatermarkCommand(_executor, _commandBuilder);
         }
+
+        public ICommand<MergeVideosModel> CreateMergeCommand()
+        {
+            return new MergeCommand(_executor, _commandBuilder);
         public ICommand<ExtractAudioModel> CreateExtractAudioCommand()
         {
             return new ExtractAudioCommand(_executor, _commandBuilder);

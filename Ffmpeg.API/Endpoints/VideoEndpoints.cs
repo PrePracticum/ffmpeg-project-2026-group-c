@@ -27,6 +27,9 @@ namespace FFmpeg.API.Endpoints
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600)); 
 
+            app.MapPost("/api/video/merge", MergeVideos)
+                .DisableAntiforgery()
+                .WithMetadata(new RequestSizeLimitAttribute(209715200));
             app.MapPost("/api/video/reverse", ReverseVideo)
                 .DisableAntiforgery()
                 .WithMetadata(new RequestSizeLimitAttribute(104857600));
@@ -534,12 +537,56 @@ namespace FFmpeg.API.Endpoints
             }
         }
 
+        private static async Task<IResult> MergeVideos(
+            HttpContext context,
+            [FromForm] MergeDto dto)
+        {
         private static async Task<IResult> ExtractAudio(HttpContext context, [FromForm] ExtractAudioDto dto)
         {
             var fileService = context.RequestServices.GetRequiredService<IFileService>();
             var ffmpegService = context.RequestServices.GetRequiredService<IFFmpegServiceFactory>();
             var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
 
+            try
+            {
+                if (dto.VideoFile1 == null || dto.VideoFile2 == null)
+                    return Results.BadRequest("Both video files are required");
+
+                string file1 = await fileService.SaveUploadedFileAsync(dto.VideoFile1);
+                string file2 = await fileService.SaveUploadedFileAsync(dto.VideoFile2);
+                string output = await fileService.GenerateUniqueFileNameAsync(Path.GetExtension(dto.VideoFile1.FileName));
+
+                var filesToCleanup = new List<string> { file1, file2, output };
+
+                try
+                {
+                    var command = ffmpegService.CreateMergeCommand(); // ודאי שמתודה זו קיימת ב-Factory
+                    var result = await command.ExecuteAsync(new MergeModel
+                    {
+                        InputFile1 = file1,
+                        InputFile2 = file2,
+                        OutputFile = output,
+                        IsHorizontal = dto.IsHorizontal
+                    });
+
+                    if (!result.IsSuccess)
+                        return Results.Problem("Merge failed: " + result.ErrorMessage);
+
+                    byte[] fileBytes = await fileService.GetOutputFileAsync(output);
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+
+                    return Results.File(fileBytes, "video/mp4", "merged_video.mp4");
+                }
+                catch (Exception ex)
+                {
+                    _ = fileService.CleanupTempFilesAsync(filesToCleanup);
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error in MergeVideos");
+                return Results.Problem("An error occurred", statusCode: 500);
             var filesToCleanup = new List<string>();
 
             try
