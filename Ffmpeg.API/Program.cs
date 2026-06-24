@@ -1,6 +1,7 @@
 using Ffmpeg.Command;
 using FFmpeg.API.Endpoints;
 using FFmpeg.Core.Interfaces;
+using FFmpeg.Infrastructure.Commands;
 using FFmpeg.Infrastructure.Services;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -41,7 +42,12 @@ builder.Services.AddScoped<IFFmpegServiceFactory>(provider =>
 
 // Add file service for handling temporary files
 builder.Services.AddScoped<IFileService, FileService>();
-
+builder.Services.AddScoped<GreenScreenCommand>(provider => 
+{
+    var logger = provider.GetRequiredService<Ffmpeg.Command.ILogger>();
+    
+    return new GreenScreenCommand(logger, "ffmpeg");
+});
 
 var app = builder.Build();
 
@@ -50,6 +56,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.MapGreenScreenEndpoint();
 }
 
 app.UseHttpsRedirection();
