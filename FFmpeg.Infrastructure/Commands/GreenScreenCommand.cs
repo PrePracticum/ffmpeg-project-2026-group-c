@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using System.Threading.Tasks;
 using FFmpeg.Core.Models;
-using Ffmpeg.Command; // בשביל ה-ILogger אם נצטרך אותו בעתיד
-
+using Ffmpeg.Command; 
 namespace FFmpeg.Infrastructure.Commands
 {
     public class GreenScreenCommand
@@ -16,14 +15,12 @@ namespace FFmpeg.Infrastructure.Commands
             _ffmpegPath = ffmpegPath;
         }
 
-        // שינינו את סוג ההחזרה ל-Task<bool> כדי שנדע אם הפעולה הצליחה
         public async Task<bool> ExecuteAsync(GreenScreenModel model)
         {
             string arguments = $"-i \"{model.InputFile}\" -i \"{model.BackgroundFile}\" " +
                                $"-filter_complex \"[0:v]chromakey=0x00FF00:0.1:0.2[ckout];[1:v][ckout]overlay[out]\" " +
                                $"-map \"[out]\" \"{model.OutputFile}\"";
 
-            // ויתרנו על _logger.Log בגלל השגיאה, והחלפנו בהדפסה רגילה לקונסול
             System.Console.WriteLine($"Running GreenScreen command: ffmpeg {arguments}");
 
             var processInfo = new ProcessStartInfo
